@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Auth Demo</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #0088cc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0077b3;
+        }
+        .user-info {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Добро пожаловать!</h1>
+        <div id="auth-button">
+            <button onclick="loginWithTelegram()">Войти через Telegram</button>
+        </div>
+        <div id="user-info" class="user-info" style="display: none;">
+            <p>Привет, <span id="username"></span>!</p>
+        </div>
+    </div>
+
+    <script>
+        function loginWithTelegram() {
+            // Создаем кнопку для аутентификации Telegram
+            const botUsername = 'Dvhmanager_bot'; // Замените на username вашего бота
+            const authUrl = `https://oauth.telegram.org/auth?bot_id=${botUsername}&origin=${encodeURIComponent(window.location.origin)}&embed=1&request_access=write`;
+            
+            window.open(authUrl, 'TelegramAuth', 'width=500,height=600');
+            
+            // Слушаем сообщения от окна аутентификации
+            window.addEventListener('message', handleTelegramAuth);
+        }
+
+        function handleTelegramAuth(event) {
+            // Проверяем происхождение сообщения
+            if (event.origin !== 'https://oauth.telegram.org') return;
+            
+            const authData = event.data;
+            
+            if (authData.event === 'auth_result' && authData.result === 'success') {
+                // Успешная аутентификация
+                const user = authData.user;
+                
+                // Показываем информацию о пользователе
+                document.getElementById('username').textContent = user.first_name || 'Пользователь';
+                document.getElementById('auth-button').style.display = 'none';
+                document.getElementById('user-info').style.display = 'block';
+                
+                // Можно сохранить данные пользователя в localStorage
+                localStorage.setItem('telegram_user', JSON.stringify(user));
+            }
+        }
+
+        // Проверяем, есть ли сохраненные данные пользователя
+        window.onload = function() {
+            const savedUser = localStorage.getItem('telegram_user');
+            if (savedUser) {
+                const user = JSON.parse(savedUser);
+                document.getElementById('username').textContent = user.first_name || 'Пользователь';
+                document.getElementById('auth-button').style.display = 'none';
+                document.getElementById('user-info').style.display = 'block';
+            }
+        };
+    </script>
+</body>
+</html>
