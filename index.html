@@ -1,99 +1,209 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <!-- ... (остальные meta-теги и стили остаются без изменений) ... -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Auth</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            text-align: center;
+            padding: 30px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            max-width: 400px;
+            width: 100%;
+        }
+        button {
+            background-color: #0088cc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+            width: 100%;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background-color: #0077b3;
+        }
+        .user-info {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+        .remember-me {
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #remember-me {
+            margin-right: 10px;
+        }
+        .logout-btn {
+            background-color: #e74c3c;
+            margin-top: 20px;
+        }
+        .logout-btn:hover {
+            background-color: #c0392b;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <h1>Добро пожаловать!</h1>
-        <div id="auth-button">
-            <button onclick="loginWithTelegram()">Войти через Telegram</button>
+        <h1>Telegram Auth Demo</h1>
+        <div id="auth-section">
+            <div id="auth-button">
+                <button onclick="loginWithTelegram()">Войти через Telegram</button>
+                <div class="remember-me">
+                    <input type="checkbox" id="remember-me" checked>
+                    <label for="remember-me">Запомнить меня</label>
+                </div>
+            </div>
         </div>
         <div id="user-info" class="user-info" style="display: none;">
             <p>Привет, <span id="username"></span>!</p>
+            <button class="logout-btn" onclick="logout()">Выйти</button>
         </div>
     </div>
 
     <script>
-  // 1. Проверяем авторизацию при загрузке
-  document.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
-  });
+        // Инициализация при загрузке
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeAuth();
+        });
 
-  // 2. Основная функция проверки авторизации
-  function checkAuth() {
-    // Вариант 1: Уже авторизован в WebApp
-    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
-      const tgUser = Telegram.WebApp.initDataUnsafe.user;
-      handleSuccessAuth(tgUser);
-      return;
-    }
+        // Основная функция инициализации авторизации
+        function initializeAuth() {
+            // 1. Проверяем данные WebApp (если внутри Telegram)
+            if (window.Telegram?.WebApp?.initData) {
+                handleTelegramWebApp();
+                return;
+            }
 
-    // Вариант 2: Есть сохраненная сессия
-    const savedSession = localStorage.getItem('tg_auth');
-    if (savedSession) {
-      handleSuccessAuth(JSON.parse(savedSession));
-      return;
-    }
+            // 2. Проверяем сохранённую сессию
+            checkSavedSession();
+        }
 
-    // Вариант 3: Нужна новая авторизация
-    showAuthButton();
-  }
+        // Обработка входа через Telegram WebApp
+        function handleTelegramWebApp() {
+            const tg = Telegram.WebApp;
+            const user = tg.initDataUnsafe?.user;
+            
+            if (user) {
+                tg.expand();
+                tg.ready();
+                
+                // Сохраняем сессию
+                const sessionData = {
+                    user: user,
+                    isWebApp: true,
+                    authDate: tg.initDataUnsafe.auth_date
+                };
+                localStorage.setItem('tg_auth', JSON.stringify(sessionData));
+                
+                showUserInfo(user.first_name || 'Пользователь');
+            } else {
+                showAuthButton();
+            }
+        }
 
-  // 3. Обработка успешной авторизации
-  function handleSuccessAuth(user) {
-    document.getElementById('username').textContent = user.first_name || 'Пользователь';
-    document.getElementById('auth-button').style.display = 'none';
-    document.getElementById('user-info').style.display = 'block';
-    
-    // Сохраняем сессию
-    localStorage.setItem('tg_auth', JSON.stringify(user));
-    
-    // Если в MiniApp - инициализируем WebApp
-    if (window.Telegram?.WebApp) {
-      Telegram.WebApp.ready();
-      Telegram.WebApp.expand();
-    }
-  }
+        // Проверка сохранённой сессии
+        function checkSavedSession() {
+            const savedAuth = localStorage.getItem('tg_auth');
+            if (!savedAuth) {
+                showAuthButton();
+                return;
+            }
 
-  // 4. Показываем кнопку авторизации
-  function showAuthButton() {
-    document.getElementById('auth-button').style.display = 'block';
-    document.getElementById('user-info').style.display = 'none';
-  }
+            const session = JSON.parse(savedAuth);
+            
+            // Проверяем срок действия сессии (30 дней)
+            const sessionExpired = session.authDate && 
+                (Date.now() / 1000 - session.authDate) > 30 * 24 * 60 * 60;
+            
+            if (!sessionExpired) {
+                showUserInfo(session.user.first_name || 'Пользователь');
+            } else {
+                localStorage.removeItem('tg_auth');
+                showAuthButton();
+            }
+        }
 
-  // 5. Функция для кнопки "Войти через Telegram"
-  function loginWithTelegram() {
-    const botId = "7474644739:AAE7YQNPDBmvIdOeKLrrb3j42zjvFL1w4Bs"; // Цифровой ID из @BotFather
-    
-    // Если внутри MiniApp - используем встроенную авторизацию
-    if (window.Telegram?.WebApp) {
-      Telegram.WebApp.openTelegramLink(`https://oauth.telegram.org/auth?bot_id=${botId}&origin=${encodeURIComponent(window.location.origin)}&request_access=write`);
-      return;
-    }
-    
-    // Для браузера - обычный OAuth
-    const authWindow = window.open(
-      `https://oauth.telegram.org/auth?bot_id=${botId}&origin=${encodeURIComponent(window.location.origin)}&embed=1&request_access=write`,
-      'TelegramAuth',
-      'width=500,height=600'
-    );
+        // Показываем информацию о пользователе
+        function showUserInfo(username) {
+            document.getElementById('username').textContent = username;
+            document.getElementById('auth-section').style.display = 'none';
+            document.getElementById('user-info').style.display = 'block';
+        }
 
-    window.addEventListener('message', (event) => {
-      if (event.origin !== 'https://oauth.telegram.org') return;
-      
-      if (event.data?.event === 'auth_result' && event.data?.result === 'success') {
-        handleSuccessAuth(event.data.user);
-        if (authWindow) authWindow.close();
-      }
-    });
-  }
+        // Показываем кнопку авторизации
+        function showAuthButton() {
+            document.getElementById('auth-section').style.display = 'block';
+            document.getElementById('user-info').style.display = 'none';
+        }
 
-  // 6. Выход из системы
-  function logout() {
-    localStorage.removeItem('tg_auth');
-    checkAuth(); // Вернет нас к состоянию авторизации
-  }
-</script>
+        // Вход через Telegram OAuth
+        function loginWithTelegram() {
+            const botId = "7474644739:AAE7YQNPDBmvIdOeKLrrb3j42zjvFL1w4Bs"; // Замените на цифровой ID бота
+            
+            // Если внутри Telegram Mini App
+            if (window.Telegram?.WebApp) {
+                Telegram.WebApp.openTelegramLink(
+                    `https://oauth.telegram.org/auth?bot_id=${botId}&origin=${
+                        encodeURIComponent(window.location.origin)
+                    }&request_access=write`
+                );
+                return;
+            }
+            
+            // Для обычного браузера
+            const authUrl = `https://oauth.telegram.org/auth?bot_id=${botId}&origin=${
+                encodeURIComponent(window.location.origin)
+            }&embed=1&request_access=write`;
+            
+            const authWindow = window.open(authUrl, 'TelegramAuth', 'width=500,height=600');
+            
+            // Обработчик сообщений от окна авторизации
+            window.addEventListener('message', (event) => {
+                if (event.origin !== 'https://oauth.telegram.org') return;
+                
+                if (event.data?.event === 'auth_result' && event.data?.result === 'success') {
+                    const user = event.data.user;
+                    
+                    // Сохраняем сессию, если отмечено "Запомнить меня"
+                    if (document.getElementById('remember-me').checked) {
+                        const sessionData = {
+                            user: user,
+                            isWebApp: false,
+                            authDate: Math.floor(Date.now() / 1000)
+                        };
+                        localStorage.setItem('tg_auth', JSON.stringify(sessionData));
+                    }
+                    
+                    showUserInfo(user.first_name || 'Пользователь');
+                    if (authWindow) authWindow.close();
+                }
+            });
+        }
+
+        // Выход из системы
+        function logout() {
+            localStorage.removeItem('tg_auth');
+            showAuthButton();
+        }
+    </script>
 </body>
 </html>
