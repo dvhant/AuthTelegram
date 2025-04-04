@@ -15,58 +15,85 @@
     </div>
 
     <script>
-    // Проверяем, открыто ли внутри Telegram WebApp
-    if (window.Telegram && Telegram.WebApp) {
-        const tgUser = Telegram.WebApp.initDataUnsafe.user;
-        if (tgUser) {
-            showUser(tgUser.first_name || 'Пользователь');
-            Telegram.WebApp.expand(); // Раскрываем Mini App на весь экран
-        }
+  // 1. Проверяем авторизацию при загрузке
+  document.addEventListener('DOMContentLoaded', () => {
+    checkAuth();
+  });
+
+  // 2. Основная функция проверки авторизации
+  function checkAuth() {
+    // Вариант 1: Уже авторизован в WebApp
+    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+      const tgUser = Telegram.WebApp.initDataUnsafe.user;
+      handleSuccessAuth(tgUser);
+      return;
     }
 
-    // Функция для показа данных пользователя
-    function showUser(name) {
-        document.getElementById('username').textContent = name;
-        document.getElementById('auth-button').style.display = 'none';
-        document.getElementById('user-info').style.display = 'block';
+    // Вариант 2: Есть сохраненная сессия
+    const savedSession = localStorage.getItem('tg_auth');
+    if (savedSession) {
+      handleSuccessAuth(JSON.parse(savedSession));
+      return;
     }
 
-    // OAuth через Telegram (кнопка "Войти")
-    function loginWithTelegram() {
-        const botId = "7474644739:AAE7YQNPDBmvIdOeKLrrb3j42zjvFL1w4Bs"; // Замените на ваш bot_id (цифры из @BotFather)
-        const authUrl = `https://oauth.telegram.org/auth?bot_id=${botId}&origin=${encodeURIComponent(window.location.origin)}&embed=1&request_access=write`;
-        
-        const authWindow = window.open(authUrl, 'TelegramAuth', 'width=500,height=600');
-        
-        // Слушаем ответ от Telegram OAuth
-        window.addEventListener('message', (event) => {
-            if (event.origin !== 'https://oauth.telegram.org') return;
-            
-            const data = event.data;
-            if (data.event === 'auth_result' && data.result === 'success') {
-                const user = data.user;
-                showUser(user.first_name || 'Пользователь');
-                localStorage.setItem('telegram_user', JSON.stringify(user));
-                
-                // Закрываем окно авторизации
-                if (authWindow) authWindow.close();
-                
-                // Если в Mini App — обновляем интерфейс
-                if (window.Telegram?.WebApp) {
-                    Telegram.WebApp.expand();
-                }
-            }
-        });
-    }
+    // Вариант 3: Нужна новая авторизация
+    showAuthButton();
+  }
 
-    // Проверяем localStorage при загрузке
-    window.onload = () => {
-        const savedUser = localStorage.getItem('telegram_user');
-        if (savedUser) {
-            const user = JSON.parse(savedUser);
-            showUser(user.first_name || 'Пользователь');
-        }
-    };
+  // 3. Обработка успешной авторизации
+  function handleSuccessAuth(user) {
+    document.getElementById('username').textContent = user.first_name || 'Пользователь';
+    document.getElementById('auth-button').style.display = 'none';
+    document.getElementById('user-info').style.display = 'block';
+    
+    // Сохраняем сессию
+    localStorage.setItem('tg_auth', JSON.stringify(user));
+    
+    // Если в MiniApp - инициализируем WebApp
+    if (window.Telegram?.WebApp) {
+      Telegram.WebApp.ready();
+      Telegram.WebApp.expand();
+    }
+  }
+
+  // 4. Показываем кнопку авторизации
+  function showAuthButton() {
+    document.getElementById('auth-button').style.display = 'block';
+    document.getElementById('user-info').style.display = 'none';
+  }
+
+  // 5. Функция для кнопки "Войти через Telegram"
+  function loginWithTelegram() {
+    const botId = "7474644739:AAE7YQNPDBmvIdOeKLrrb3j42zjvFL1w4Bs"; // Цифровой ID из @BotFather
+    
+    // Если внутри MiniApp - используем встроенную авторизацию
+    if (window.Telegram?.WebApp) {
+      Telegram.WebApp.openTelegramLink(`https://oauth.telegram.org/auth?bot_id=${botId}&origin=${encodeURIComponent(window.location.origin)}&request_access=write`);
+      return;
+    }
+    
+    // Для браузера - обычный OAuth
+    const authWindow = window.open(
+      `https://oauth.telegram.org/auth?bot_id=${botId}&origin=${encodeURIComponent(window.location.origin)}&embed=1&request_access=write`,
+      'TelegramAuth',
+      'width=500,height=600'
+    );
+
+    window.addEventListener('message', (event) => {
+      if (event.origin !== 'https://oauth.telegram.org') return;
+      
+      if (event.data?.event === 'auth_result' && event.data?.result === 'success') {
+        handleSuccessAuth(event.data.user);
+        if (authWindow) authWindow.close();
+      }
+    });
+  }
+
+  // 6. Выход из системы
+  function logout() {
+    localStorage.removeItem('tg_auth');
+    checkAuth(); // Вернет нас к состоянию авторизации
+  }
 </script>
 </body>
 </html>
